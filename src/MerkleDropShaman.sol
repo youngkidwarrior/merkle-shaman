@@ -496,6 +496,7 @@ contract MerkleDropShaman {
      * @param _merkleRoot The Merkle root for the new period
      */
     function addPeriod(bytes32 _merkleRoot) external {
+        require(baal.isManager(msg.sender), "Only manager can add period");
         require(
             block.timestamp >= latestPeriodTimestamp(),
             "Previous period not ended yet"
