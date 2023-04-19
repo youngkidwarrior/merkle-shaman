@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
-import MerkleDropShamanArtifact from "../../artifacts/src_MerkleDropShaman_sol_MerkleDropShaman.json";
+import MerkleDropShamanArtifact from "../contracts/MerkleDropShaman.json";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useSigner } from "wagmi";
+import { useSigner, useContract } from "wagmi";
 
 const App: React.FC = () => {
   const [provider, setProvider] = useState<ethers.providers.Web3Provider>();
@@ -19,11 +19,10 @@ const App: React.FC = () => {
     if (!provider || !inputAddress) return;
 
     try {
-      const existingContract = new ethers.Contract(
-        inputAddress,
-        MerkleDropShamanArtifact.abi,
-        signer
-      );
+      const existingContract = useContract({
+        address: inputAddress,
+        abi: MerkleDropShamanArtifact.abi,
+      });
       setContract(existingContract);
     } catch (error) {
       console.error("Error connecting to existing contract:", error);
@@ -46,7 +45,7 @@ const App: React.FC = () => {
     const factory = new ethers.ContractFactory(
       MerkleDropShamanArtifact.abi,
       MerkleDropShamanArtifact.bytecode,
-      signer
+      signer as ethers.Signer
     );
 
     const deployedContract = await factory.deploy(
@@ -96,7 +95,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-black via-red-900 to-yellow-500">
       <div className="container mx-auto py-10 px-4">
         <h1 className="text-4xl text-white mb-8">Merkle Drop Shaman</h1>
-        <ConnectButton className="mb-8" />
+        <ConnectButton />
 
         {!contract && (
           <form onSubmit={deployContract} className="grid grid-cols-2 gap-4">
