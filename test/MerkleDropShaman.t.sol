@@ -17,7 +17,6 @@ contract MerkleDropShamanTest is Test {
 
         uint256 periodLengthInSeconds = 1 weeks;
         uint256 startTimeInSeconds = block.timestamp + 1 days;
-        uint256 totalTokensToDrop = 1000;
         bool shouldDropShares = true;
         bool shouldDropLoot = true;
         address customTokenAddress = address(customToken);
@@ -26,7 +25,6 @@ contract MerkleDropShamanTest is Test {
             address(baal),
             periodLengthInSeconds,
             startTimeInSeconds,
-            totalTokensToDrop,
             shouldDropShares,
             shouldDropLoot,
             customTokenAddress

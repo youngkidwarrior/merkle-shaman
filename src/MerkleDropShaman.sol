@@ -361,21 +361,19 @@ contract MerkleDropShaman {
         bool shouldDropShares;
         bool shouldDropLoot;
         uint256 periodLengthInSeconds;
-        uint256 totalTokensToDrop; // Might want to drop different amounts for loot, shares, and custom
         uint256 startTimeInSeconds;
     }
 
     Config dropConfig;
     Tokens dropTokens;
 
-    event Claimed(address indexed user, uint256 period, uint256 amount);
+    event Claimed(address indexed user, uint256 period, uint256[3] amounts);
 
     /**
      * @notice Constructor for MerkleDropShaman contract
      * @param _daoAddress The address of the Baal DAO contract
      * @param _periodLengthInSeconds The length of each drop period in seconds
      * @param _startTimeInSeconds The start time of the first drop period in seconds since Unix epoch
-     * @param _totalTokensToDrop The total number of tokens to be dropped across all periods
      * @param _shouldDropShares Boolean flag to enable or disable dropping shares tokens
      * @param _shouldDropLoot Boolean flag to enable or disable dropping loot tokens
      * @param _customToken The address of the custom ERC20 token to be dropped (optional)
@@ -384,16 +382,10 @@ contract MerkleDropShaman {
         address _daoAddress,
         uint256 _periodLengthInSeconds,
         uint256 _startTimeInSeconds,
-        uint256 _totalTokensToDrop,
         bool _shouldDropShares,
         bool _shouldDropLoot,
         address _customToken
     ) {
-        require(_totalTokensToDrop > 0, "Must drop at least one token");
-        require(
-            _startTimeInSeconds > block.timestamp,
-            "Start time must be in the future"
-        );
         require(
             _shouldDropShares || _shouldDropLoot || _customToken != address(0),
             "Must set at least one type of token to be dropped"
@@ -412,7 +404,6 @@ contract MerkleDropShaman {
 
         dropConfig = Config({
             periodLengthInSeconds: _periodLengthInSeconds,
-            totalTokensToDrop: _totalTokensToDrop,
             startTimeInSeconds: _startTimeInSeconds,
             shouldDropShares: _shouldDropShares,
             shouldDropLoot: _shouldDropLoot
@@ -422,12 +413,12 @@ contract MerkleDropShaman {
     /**
      * @notice Claim tokens for a given period using the provided Merkle proof
      * @param period The period for which the claim is being made
-     * @param amount The amount of tokens being claimed
+     * @param amounts The amounts of tokens being claimed
      * @param merkleProof The Merkle proof to validate the claim
      */
     function claim(
         uint256 period,
-        uint256 amount,
+        uint256[3] calldata amounts,
         bytes32[] calldata merkleProof
     ) public {
         require(period < merkleRoots.length, "Invalid period");
@@ -436,8 +427,7 @@ contract MerkleDropShaman {
             "Already claimed for this period"
         );
 
-        // Verify the Merkle proof
-        bytes32 node = keccak256(abi.encodePacked(msg.sender, amount));
+        bytes32 node = keccak256(abi.encodePacked(msg.sender, amounts));
         require(
             MerkleProof.verify(merkleProof, merkleRoots[period], node),
             "Invalid Merkle proof"
@@ -446,19 +436,20 @@ contract MerkleDropShaman {
         address[] memory recipients = new address[](1);
         recipients[0] = msg.sender;
 
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
+        uint256[] memory _amounts = new uint256[](1);
 
         // Mint and/or transfer tokens
         if (dropConfig.shouldDropShares) {
-            baal.mintShares(recipients, amounts);
+            _amounts[0] = amounts[0];
+            baal.mintShares(recipients, _amounts);
         }
         if (dropConfig.shouldDropLoot) {
-            baal.mintLoot(recipients, amounts);
+            _amounts[0] = amounts[1];
+            baal.mintLoot(recipients, _amounts);
         }
         if (address(dropTokens.customToken) != address(0)) {
             require(
-                dropTokens.customToken.transfer(msg.sender, amount),
+                dropTokens.customToken.transfer(msg.sender, amounts[2]),
                 "Token transfer failed"
             );
         }
@@ -466,18 +457,18 @@ contract MerkleDropShaman {
         // Mark the claim as complete
         claimed[period][msg.sender] = true;
 
-        emit Claimed(msg.sender, period, amount);
+        emit Claimed(msg.sender, period, amounts);
     }
 
     /**
      * @notice Claim tokens for multiple periods using the provided Merkle proofs
      * @param periods Array of periods for which the claims are being made
-     * @param amounts Array of amounts of tokens being claimed
+     * @param amounts Array of array of amounts of tokens being claimed
      * @param merkleProofs Array of Merkle proofs to validate the claims
      */
     function claimAll(
         uint256[] calldata periods,
-        uint256[] calldata amounts,
+        uint256[3][] calldata amounts,
         bytes32[][] calldata merkleProofs
     ) external {
         require(
@@ -501,28 +492,28 @@ contract MerkleDropShaman {
             block.timestamp >= latestPeriodTimestamp(),
             "Previous period not ended yet"
         );
-        //require tokens are in contract
-        if (address(dropTokens.customToken) != address(0)) {
-            uint256 tokensToDropInPeriod = dropConfig.totalTokensToDrop /
-                merkleRoots.length;
-            require(
-                dropTokens.customToken.balanceOf(address(this)) >=
-                    tokensToDropInPeriod,
-                "Not enough tokens in contract"
-            );
-        }
 
         merkleRoots.push(_merkleRoot);
     }
 
     /**
-     * @notice Get the timestamp of the latest period
+     * @notice Get the start timestamp of the latest period
      * @return uint256 Timestamp of the latest period
      */
     function latestPeriodTimestamp() public view returns (uint256) {
         return
             dropConfig.startTimeInSeconds +
-            ((merkleRoots.length + 1) * dropConfig.periodLengthInSeconds);
+            ((merkleRoots.length) * dropConfig.periodLengthInSeconds);
+    }
+
+    /**
+     * @notice get how many periods havve passed since the start of the drop
+     * @return uint256 Timestamp of the latest period
+     */
+    function periodCount() external view returns (uint256) {
+        return
+            (block.timestamp - dropConfig.startTimeInSeconds) /
+            dropConfig.periodLengthInSeconds; // solidity should cut off the decimal here and round to the zero
     }
 
     /**
